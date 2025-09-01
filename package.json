@@ -6,11 +6,13 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "bin": {
-    "firebase-mcp": "./dist/index.js"
+    "firebase-mcp": "./dist/index.js",
+    "firebase-mcp-cli": "./dist/firebase-mcp-cli.js"
   },
   "files": [
     "dist",
     "README.md",
+    "CLIENT_README.md",
     "LICENSE"
   ],
   "scripts": {
@@ -25,6 +27,8 @@
     "start:http": "MCP_TRANSPORT=http node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "dev:http": "tsc && MCP_TRANSPORT=http node dist/index.js",
+    "dev:cli": "tsc && node dist/firebase-mcp-cli.js",
+    "example": "tsc && node dist/examples/firebase-mcp-client-example.js",
     "inspect": ".scripts/inspect-mcp.sh",
     "lint": "eslint 'src/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' --fix",
@@ -43,6 +47,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
     "axios": "^1.9.0",
+    "commander": "^12.0.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "firebase-admin": "^13.3.0"
