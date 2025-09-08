@@ -49,6 +49,33 @@ export interface ServerConfig {
     /** HTTP path */
     path: string;
   };
+  /** Security configuration */
+  security: {
+    /** Authentication type */
+    authType: 'jwt' | 'api-key' | 'none';
+    /** JWT configuration */
+    jwt: {
+      /** JWT secret for signing/verifying tokens */
+      secret: string;
+      /** JWT issuer */
+      issuer?: string;
+      /** JWT audience */
+      audience?: string;
+      /** Token expiration time in seconds */
+      expiresIn?: number;
+    };
+    /** API keys allowed for authentication (fallback) */
+    allowedApiKeys: string[];
+    /** Rate limiting configuration */
+    rateLimit: {
+      /** Maximum requests per window */
+      requests: number;
+      /** Time window in milliseconds */
+      windowMs: number;
+    };
+    /** Enable request logging */
+    enableRequestLogging: boolean;
+  };
   /** Server version */
   version: string;
   /** Server name */
@@ -128,6 +155,21 @@ export function getConfig(): ServerConfig {
       port: parseInt(process.env.MCP_HTTP_PORT || '3000', 10),
       host: process.env.MCP_HTTP_HOST || 'localhost',
       path: process.env.MCP_HTTP_PATH || '/mcp',
+    },
+    security: {
+      authType: (process.env.AUTH_TYPE as 'jwt' | 'api-key' | 'none') || 'jwt',
+      jwt: {
+        secret: process.env.JWT_SECRET || 'your-secret-key-change-this-in-production',
+        issuer: process.env.JWT_ISSUER || 'firebase-mcp',
+        audience: process.env.JWT_AUDIENCE || 'firebase-mcp-clients',
+        expiresIn: parseInt(process.env.JWT_EXPIRES_IN || '3600', 10), // 1 hour default
+      },
+      allowedApiKeys: process.env.ALLOWED_API_KEYS?.split(',').map(key => key.trim()) || [],
+      rateLimit: {
+        requests: parseInt(process.env.RATE_LIMIT_REQUESTS || '100', 10),
+        windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
+      },
+      enableRequestLogging: process.env.ENABLE_REQUEST_LOGGING !== 'false',
     },
     version: process.env.npm_package_version || '1.3.5',
     name: 'firebase-mcp',

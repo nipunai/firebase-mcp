@@ -9,6 +9,8 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 /**
@@ -149,19 +151,15 @@ export class FirebaseMcpClient {
   async connect(): Promise<void> {
     if (this.config.transport === 'http' && this.config.http) {
       const url = `http://${this.config.http.host}:${this.config.http.port}${this.config.http.path}`;
-      await this.client.connect({
-        transport: {
-          type: 'http',
-          url,
-        },
-      });
+      const transport = new StreamableHTTPClientTransport(new URL(url));
+      await this.client.connect(transport);
     } else {
       // Default to stdio transport
-      await this.client.connect({
-        transport: {
-          type: 'stdio',
-        },
+      const transport = new StdioClientTransport({
+        command: 'node',
+        args: ['dist/index.js'],
       });
+      await this.client.connect(transport);
     }
   }
 
@@ -173,6 +171,13 @@ export class FirebaseMcpClient {
   }
 
   /**
+   * Helper function to parse MCP response content
+   */
+  private parseResponse(response: any): any {
+    return JSON.parse((response.content as any[])[0].text);
+  }
+
+  /**
    * Lists all available tools from the server
    */
   async listTools(): Promise<any> {
@@ -180,7 +185,7 @@ export class FirebaseMcpClient {
       name: 'tools/list',
       arguments: {},
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -197,7 +202,7 @@ export class FirebaseMcpClient {
         data,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -222,7 +227,7 @@ export class FirebaseMcpClient {
         ...options,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -239,7 +244,7 @@ export class FirebaseMcpClient {
         id,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -258,7 +263,7 @@ export class FirebaseMcpClient {
         data,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -275,7 +280,7 @@ export class FirebaseMcpClient {
         id,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -287,7 +292,7 @@ export class FirebaseMcpClient {
       name: 'firestore_list_collections',
       arguments: {},
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -312,7 +317,7 @@ export class FirebaseMcpClient {
         ...options,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -327,7 +332,7 @@ export class FirebaseMcpClient {
         identifier,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -342,7 +347,7 @@ export class FirebaseMcpClient {
         directoryPath,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -357,7 +362,7 @@ export class FirebaseMcpClient {
         filePath,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -383,7 +388,7 @@ export class FirebaseMcpClient {
         metadata,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -409,7 +414,7 @@ export class FirebaseMcpClient {
         metadata,
       },
     });
-    return JSON.parse(response.content[0].text);
+    return this.parseResponse(response);
   }
 
   /**
@@ -449,7 +454,7 @@ export class FirebaseMcpClient {
  */
 export function createFirebaseMcpClient(config?: Partial<FirebaseMcpClientConfig>): FirebaseMcpClient {
   const defaultConfig: FirebaseMcpClientConfig = {
-    transport: 'stdio',
+    transport: 'http',
     http: {
       port: 3000,
       host: 'localhost',
@@ -460,15 +465,4 @@ export function createFirebaseMcpClient(config?: Partial<FirebaseMcpClientConfig
   return new FirebaseMcpClient({ ...defaultConfig, ...config });
 }
 
-// Export types for external use
-export type {
-  FirebaseMcpClientConfig,
-  FirestoreFilter,
-  FirestoreOrderBy,
-  FirestoreDocument,
-  FirestoreListResponse,
-  FirestoreCollectionsResponse,
-  StorageFileInfo,
-  StorageListResponse,
-  AuthUser,
-};
+

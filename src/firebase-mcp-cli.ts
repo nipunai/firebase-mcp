@@ -23,7 +23,7 @@ program
 
 // Global options
 program
-  .option('-t, --transport <type>', 'Transport type (stdio|http)', 'stdio')
+  .option('-t, --transport <type>', 'Transport type (stdio|http)', 'http')
   .option('-p, --port <number>', 'HTTP port', '3000')
   .option('-h, --host <host>', 'HTTP host', 'localhost')
   .option('--path <path>', 'HTTP path', '/mcp')

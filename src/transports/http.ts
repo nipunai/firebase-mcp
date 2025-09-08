@@ -14,6 +14,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../utils/logger.js';
 import type { ServerConfig } from '../config.js';
+import { createSecurityUtils, extractClientId } from '../utils/security.js';
 
 /**
  * Initialize HTTP transport for the MCP server
@@ -25,11 +26,60 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
   const app = express();
   app.use(express.json());
 
+  // Initialize security utilities
+  const security = createSecurityUtils(config);
+
   // Map to store transports by session ID
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
   // Handle POST requests for client-to-server communication
-  app.post(config.http.path, async (req, res) => {
+  app.post(config.http.path, async (req, res): Promise<void> => {
+    // Extract client identifier
+    const clientId = extractClientId(req);
+
+    // Check authentication (JWT or API key)
+    const authHeader = req.headers['authorization'] as string;
+    const apiKey = req.headers['x-api-key'] as string;
+    const tokenOrKey = authHeader || apiKey;
+
+    const authResult = security.authManager.authenticate(tokenOrKey);
+    if (!authResult.valid) {
+      security.requestLogger.logSecurityEvent('auth_failed', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        authType: security.authManager.getAuthType(),
+        error: authResult.error
+      });
+
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: `Unauthorized: ${authResult.error || 'Authentication failed'}`,
+        },
+        id: null,
+      });
+      return;
+    }
+
+    // Check rate limiting
+    if (!security.rateLimiter.checkLimit(clientId)) {
+      security.requestLogger.logSecurityEvent('rate_limit_exceeded', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      res.status(429).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32002,
+          message: 'Rate limit exceeded',
+        },
+        id: null,
+      });
+      return;
+    }
+
     // Check for existing session ID
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     let transport: StreamableHTTPServerTransport;
@@ -37,6 +87,10 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
       transport = transports[sessionId];
+      security.requestLogger.logRequest(sessionId, clientId, 'session_reuse', {
+        ip: req.ip,
+        userAgent: req.headers['user-agent']
+      });
     } else if (!sessionId && isInitializeRequest(req.body)) {
       // New initialization request
       transport = new StreamableHTTPServerTransport({
@@ -45,6 +99,11 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
           // Store the transport by session ID
           transports[sessionId] = transport;
           logger.debug(`Initialized new session: ${sessionId}`);
+
+          security.requestLogger.logRequest(sessionId, clientId, 'session_init', {
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+          });
         },
       });
 
@@ -52,6 +111,10 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
       transport.onclose = () => {
         if (transport.sessionId) {
           logger.debug(`Closing session: ${transport.sessionId}`);
+          security.requestLogger.logRequest(transport.sessionId, clientId, 'session_close', {
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+          });
           delete transports[transport.sessionId];
         }
       };
@@ -61,6 +124,12 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
     } else {
       // Invalid request
       logger.error('Invalid request: No valid session ID provided');
+      security.requestLogger.logSecurityEvent('invalid_session', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionId: sessionId || 'none'
+      });
+
       res.status(400).json({
         jsonrpc: '2.0',
         error: {
@@ -74,6 +143,7 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
 
     // Handle the request
     await transport.handleRequest(req, res, req.body);
+    return;
   });
 
   // Reusable handler for GET and DELETE requests
@@ -81,15 +151,82 @@ export async function initializeHttpTransport(server: Server, config: ServerConf
     req: express.Request,
     res: express.Response
   ): Promise<void> => {
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    if (!sessionId || !transports[sessionId]) {
-      logger.error(`Invalid or missing session ID: ${sessionId}`);
-      res.status(400).send('Invalid or missing session ID');
+    const clientId = extractClientId(req);
+
+    // Check authentication (JWT or API key)
+    const authHeader = req.headers['authorization'] as string;
+    const apiKey = req.headers['x-api-key'] as string;
+    const tokenOrKey = authHeader || apiKey;
+
+    const authResult = security.authManager.authenticate(tokenOrKey);
+    if (!authResult.valid) {
+      security.requestLogger.logSecurityEvent('auth_failed', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        method: req.method,
+        authType: security.authManager.getAuthType(),
+        error: authResult.error
+      });
+
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: `Unauthorized: ${authResult.error || 'Authentication failed'}`,
+        },
+        id: null,
+      });
       return;
     }
 
+    // Check rate limiting
+    if (!security.rateLimiter.checkLimit(clientId)) {
+      security.requestLogger.logSecurityEvent('rate_limit_exceeded', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        method: req.method
+      });
+
+      res.status(429).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32002,
+          message: 'Rate limit exceeded',
+        },
+        id: null,
+      });
+      return;
+    }
+
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !transports[sessionId]) {
+      logger.error(`Invalid or missing session ID: ${sessionId}`);
+      security.requestLogger.logSecurityEvent('invalid_session', clientId, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionId: sessionId || 'none',
+        method: req.method
+      });
+
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Invalid or missing session ID',
+        },
+        id: null,
+      });
+      return;
+    }
+
+    security.requestLogger.logRequest(sessionId, clientId, `session_${req.method.toLowerCase()}`, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent']
+    });
+
     const transport = transports[sessionId];
     await transport.handleRequest(req, res);
+    return;
   };
 
   // Handle GET requests for server-to-client notifications via SSE

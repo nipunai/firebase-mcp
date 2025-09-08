@@ -23,10 +23,10 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:emulator": "USE_FIREBASE_EMULATOR=true vitest run --coverage",
     "test:verbose": "clear && vitest run --reporter verbose",
-    "start": "node dist/index.js",
-    "start:http": "MCP_TRANSPORT=http node dist/index.js",
-    "dev": "tsc && node dist/index.js",
-    "dev:http": "tsc && MCP_TRANSPORT=http node dist/index.js",
+    "start": "node dist/src/index.js",
+    "start:http": "MCP_TRANSPORT=http node dist/src/index.js",
+    "dev": "tsc && node dist/src/index.js",
+    "dev:http": "tsc && MCP_TRANSPORT=http node dist/src/index.js",
     "dev:cli": "tsc && node dist/firebase-mcp-cli.js",
     "example": "tsc && node dist/examples/firebase-mcp-client-example.js",
     "inspect": ".scripts/inspect-mcp.sh",
@@ -46,11 +46,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "axios": "^1.9.0",
-    "commander": "^12.0.0",
+    "commander": "^12.1.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "firebase-admin": "^13.3.0"
+    "firebase-admin": "^13.3.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
